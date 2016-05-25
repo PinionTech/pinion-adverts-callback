@@ -1,9 +1,30 @@
-#define PLUGIN_VERSION "0.1.0"
+#define PLUGIN_VERSION "0.2.0"
+
+/*
+	1.0.0 <-> 2016 5/24 - Caelan Borowiec
+		Initial Version
+		Now with updater
+*/
 
 #include <sourcemod>
 #include <sdktools>
+#undef REQUIRE_PLUGIN
+#tryinclude <updater>
+#define REQUIRE_PLUGIN
+
+enum VGUIKVState {
+	STATE_MSG,
+	STATE_TITLE,
+	STATE_CMD,
+	STATE_TYPE,
+	STATE_INVALID
+}
+new VGUIKVState:g_State = STATE_INVALID;
 
 new String:g_BaseURL[PLATFORM_MAX_PATH];
+
+#define UPDATE_URL "http://bin.pinion.gg/bin/pinion_adverts/adverts-callback.txt"
+
 
 public OnPluginStart()
 {
@@ -18,16 +39,24 @@ public OnPluginStart()
 	
 	// Version of plugin - Make visible to game-monitor.com - Dont store in configuration file
 	CreateConVar("sm_motdhook_version", PLUGIN_VERSION, "[SM] motdHook Version", FCVAR_NOTIFY|FCVAR_DONTRECORD);
+	
+	#if defined _updater_included
+		if (LibraryExists("updater"))
+		{
+			Updater_AddPlugin(UPDATE_URL);
+		}
+	#endif
 }
 
-enum VGUIKVState {
-	STATE_MSG,
-	STATE_TITLE,
-	STATE_CMD,
-	STATE_TYPE,
-	STATE_INVALID
+
+#if defined _updater_included
+public OnLibraryAdded(const String:name[])
+{
+	if (StrEqual(name, "updater"))
+		Updater_AddPlugin(UPDATE_URL);
 }
-new VGUIKVState:g_State = STATE_INVALID;
+#endif
+
 
 public Action:OnMsgVGUIMenu(UserMsg:msg_id, Handle:self, const players[], playersNum, bool:reliable, bool:init)
 {
@@ -176,8 +205,10 @@ public Action:RedirectPage(Handle:timer, Handle:pack)
 	ReadPackString(pack, msg, sizeof(msg));
 	ReadPackString(pack, cmd, sizeof(cmd));
 	
+	decl String:szAuth[64];
+	GetClientAuthId(client, AuthId_Steam2, szAuth, sizeof(szAuth));
 		
-	Format(msg, sizeof(msg), "%s%s", msg, g_BaseURL);
+	Format(msg, sizeof(msg), "%s%s&si=%s", msg, g_BaseURL, szAuth);
 	
 	new Handle:kv = CreateKeyValues("data");
 	KvSetString(kv, "msg",	msg);
