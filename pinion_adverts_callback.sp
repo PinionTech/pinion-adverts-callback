@@ -1,4 +1,4 @@
-#define PLUGIN_VERSION "0.2.0"
+#define PLUGIN_VERSION "1.0.0"
 
 /*
 	1.0.0 <-> 2016 5/24 - Caelan Borowiec
@@ -23,7 +23,7 @@ new VGUIKVState:g_State = STATE_INVALID;
 
 new String:g_BaseURL[PLATFORM_MAX_PATH];
 
-#define UPDATE_URL "http://bin.pinion.gg/bin/pinion_adverts/adverts-callback.txt"
+#define UPDATE_URL "http://bin.pinion.gg/bin/pinion-adverts-callback/adverts-callback.txt"
 
 
 public OnPluginStart()
