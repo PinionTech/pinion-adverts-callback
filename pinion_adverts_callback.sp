@@ -38,7 +38,7 @@ public OnPluginStart()
 	BaseURLSetup();
 	
 	// Version of plugin - Make visible to game-monitor.com - Dont store in configuration file
-	CreateConVar("sm_motdhook_version", PLUGIN_VERSION, "[SM] motdHook Version", FCVAR_NOTIFY|FCVAR_DONTRECORD);
+	CreateConVar("pinion_adverts_callback_version", PLUGIN_VERSION, "[SM] Pinion Adverts Callback Version", FCVAR_NOTIFY|FCVAR_DONTRECORD);
 	
 	#if defined _updater_included
 		if (LibraryExists("updater"))
