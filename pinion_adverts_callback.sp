@@ -1,6 +1,9 @@
-#define PLUGIN_VERSION "1.0.0"
+#define PLUGIN_VERSION "1.1.1"
 
 /*
+	1.1.1 <-> 2016 6/11 - Caelan Borowiec
+		Removed duplicate updater code
+		Plugin now detects when the motd.txt file contains only a URL (redirect) and will add variables to this URL as well.
 	1.0.0 <-> 2016 5/24 - Caelan Borowiec
 		Initial Version
 		Now with updater
@@ -22,6 +25,7 @@ enum VGUIKVState {
 new VGUIKVState:g_State = STATE_INVALID;
 
 new String:g_BaseURL[PLATFORM_MAX_PATH];
+new String:g_MotdFileURL[PLATFORM_MAX_PATH];
 
 #define UPDATE_URL "http://bin.pinion.gg/bin/pinion-adverts-callback/adverts-callback.txt"
 
@@ -46,17 +50,8 @@ public OnPluginStart()
 			Updater_AddPlugin(UPDATE_URL);
 		}
 	#endif
+
 }
-
-
-#if defined _updater_included
-public OnLibraryAdded(const String:name[])
-{
-	if (StrEqual(name, "updater"))
-		Updater_AddPlugin(UPDATE_URL);
-}
-#endif
-
 
 public Action:OnMsgVGUIMenu(UserMsg:msg_id, Handle:self, const players[], playersNum, bool:reliable, bool:init)
 {
@@ -166,7 +161,22 @@ public Action:OnMsgVGUIMenu(UserMsg:msg_id, Handle:self, const players[], player
 		
 		CreateTimer(0.0, RedirectPage, pack, TIMER_FLAG_NO_MAPCHANGE);  // Delay a frame so this hook can die
 
+		return Plugin_Handled;
+	}
+	else 	if (StringToInt(type) == MOTDPANEL_TYPE_INDEX && StrEqual(msg, "motd") && !StrEqual(g_MotdFileURL, ""))
+	{
+		//Loading motd.txt (hopefully) and it has a URL
+		PrintToServer("URL detected in MOTD.txt");
+		 
+		new Handle:pack = CreateDataPack();
+		WritePackCell(pack, GetClientSerial(client));
+		WritePackString(pack, title);
+		WritePackString(pack, type);
+		WritePackString(pack, g_MotdFileURL);
+		WritePackString(pack, cmd);
 		
+		CreateTimer(0.0, RedirectPage, pack, TIMER_FLAG_NO_MAPCHANGE);  // Delay a frame so this hook can die
+
 		return Plugin_Handled;
 	}
 		
@@ -176,6 +186,23 @@ public Action:OnMsgVGUIMenu(UserMsg:msg_id, Handle:self, const players[], player
 
 BaseURLSetup()
 {
+	new Handle:hFile = OpenFile("motd.txt", "r");
+	if(hFile != INVALID_HANDLE)
+	{
+		decl String:sBuffer[256];
+		if(ReadFileLine(hFile, sBuffer, sizeof(sBuffer)))  // Only read one line
+		{
+			TrimString(sBuffer);
+			if((StrContains(sBuffer, "http://", false) == 0) || (StrContains(sBuffer, "https://", false) == 0))
+			{
+				// Valid URL at the start of the file
+				strcopy(g_MotdFileURL, sizeof(g_MotdFileURL), sBuffer);
+			}
+		}
+	}
+	CloseHandle(hFile);
+
+
 	decl String:szGameProfile[32];
 	GetGameFolderName(szGameProfile, sizeof(szGameProfile));
 
