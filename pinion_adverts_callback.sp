@@ -1,6 +1,8 @@
 #define PLUGIN_VERSION "1.1.1"
 
 /*
+	1.2.0 <-> 2016 6/17 - Caelan Borowiec
+		Plugin now uses the value of the motdfile cvar rather than just reading motd.txt
 	1.1.1 <-> 2016 6/11 - Caelan Borowiec
 		Removed duplicate updater code
 		Plugin now detects when the motd.txt file contains only a URL (redirect) and will add variables to this URL as well.
@@ -51,6 +53,12 @@ public OnPluginStart()
 		}
 	#endif
 
+	HookConVarChange(FindConVar("motdfile"), ConVarChange_MOTD);
+}
+
+public ConVarChange_MOTD(Handle:convar, const String:oldValue[], const String:newValue[])
+{
+	BaseURLSetup();
 }
 
 public Action:OnMsgVGUIMenu(UserMsg:msg_id, Handle:self, const players[], playersNum, bool:reliable, bool:init)
@@ -186,7 +194,9 @@ public Action:OnMsgVGUIMenu(UserMsg:msg_id, Handle:self, const players[], player
 
 BaseURLSetup()
 {
-	new Handle:hFile = OpenFile("motd.txt", "r");
+	decl String:sMOTDFile[256];
+	GetConVarString(FindConVar("motdfile"), sMOTDFile, sizeof(sMOTDFile));
+	new Handle:hFile = OpenFile(sMOTDFile, "r");
 	if(hFile != INVALID_HANDLE)
 	{
 		decl String:sBuffer[256];
