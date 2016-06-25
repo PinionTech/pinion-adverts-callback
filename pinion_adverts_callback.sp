@@ -1,6 +1,8 @@
-#define PLUGIN_VERSION "1.2.0"
+#define PLUGIN_VERSION "1.3.0"
 
 /*
+	1.3.0 <-> 2016 6/25 - Caelan Borowiec
+		Added proper support for ProtoBufs
 	1.2.0 <-> 2016 6/17 - Caelan Borowiec
 		Plugin now uses the value of the motdfile cvar rather than just reading motd.txt
 	1.1.1 <-> 2016 6/11 - Caelan Borowiec
