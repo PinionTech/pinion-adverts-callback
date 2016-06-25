@@ -24,7 +24,6 @@ enum VGUIKVState {
 	STATE_TYPE,
 	STATE_INVALID
 }
-new VGUIKVState:g_State = STATE_INVALID;
 
 new String:g_BaseURL[PLATFORM_MAX_PATH];
 new String:g_MotdFileURL[PLATFORM_MAX_PATH];
@@ -68,23 +67,7 @@ public Action:OnMsgVGUIMenu(UserMsg:msg_id, Handle:self, const players[], player
 		return Plugin_Continue;
 
 	decl String:buffer[256];
-	/*
-	if (GetFeatureStatus(FeatureType_Native, "GetUserMessageType") == FeatureStatus_Available && GetUserMessageType() == UM_Protobuf)
-		PbReadString(self, "name", buffer, sizeof(buffer));	
-	else
-		BfReadString(self, buffer, sizeof(buffer));
-	*/
-	
-	BfReadString(self, buffer, sizeof(buffer));
-		
-	if (BfReadByte(self) != 1)
-		return Plugin_Continue;
-		
-	PrintToServer("OnMsgVGUIMenu called");
-	
-	if (strcmp(buffer, "info") != 0)
-			return Plugin_Continue;
-			
+
 	/*
 	Data is arranged in pairs that can be read with BfReadString
 	Odd key reads MAY be the data handle (eg, 'title' 'type' 'msg')
@@ -92,61 +75,107 @@ public Action:OnMsgVGUIMenu(UserMsg:msg_id, Handle:self, const players[], player
 	If data values are not set, this ordering will not be predictable apart from the key first and the value second
 	*/
 	
-	 // we need to read twice to get each "pair" of data
-	 // this may over-estimate the number of reads needed (if some data values are missing) 
-	new count = BfReadByte(self) * 2;
-	//PrintToServer("Expecting %i values", count);
-	
 	decl String:title[256];
 	decl String:type[16];
 	decl String:msg[256];
 	decl String:cmd[64];
 	
-	//PrintToServer("Debug dump:\n-----");
-
-	for (new i = 0; i < count; i++)
+	if (GetFeatureStatus(FeatureType_Native, "GetUserMessageType") == FeatureStatus_Available && GetUserMessageType() == UM_Protobuf)
 	{
-		BfReadString(self, buffer, sizeof(buffer));
+		PbReadString(self, "name", buffer, sizeof(buffer));	
+		if (strcmp(buffer, "info") != 0)
+			return Plugin_Continue;
+			
+		PrintToServer("Using protobufs!");
+		new count = PbGetRepeatedFieldCount(self, "subkeys");
 		
-		if (!strcmp(buffer, ""))
-			continue; //We could probably safely break here
-		
-		//PrintToServer(buffer);
-		
-		g_State = STATE_INVALID;
-		
-		// Figure out which bit of data it is
-		if (!strcmp(buffer, "title"))
-			g_State = STATE_TITLE;
-		else if (!strcmp(buffer, "type"))
-			g_State = STATE_TYPE;
-		else if (!strcmp(buffer, "msg"))
-			g_State = STATE_MSG;
-		else if (!strcmp(buffer, "cmd"))
-			g_State = STATE_CMD;
-		
-		// Now read the actual data
-		BfReadString(self, buffer, sizeof(buffer));
-		switch (g_State)
+		decl String:sKey[128];
+		decl String:sValue[128];
+		for (int i = 0; i < count; i++)
 		{
-			case STATE_TITLE:
+			Handle hSubKey = PbReadRepeatedMessage(self, "subkeys", i);
+			PbReadString(hSubKey, "name", sKey, sizeof(sKey));
+			PbReadString(hSubKey, "str", sValue, sizeof(sValue));
+			
+			//PrintToServer("%s: %s", sKey, sValue);
+			
+			new VGUIKVState:vState = STATE_INVALID;
+		
+			// Figure out which bit of data it is
+			if (!strcmp(sKey, "title"))
+				vState = STATE_TITLE;
+			else if (!strcmp(sKey, "type"))
+				vState = STATE_TYPE;
+			else if (!strcmp(sKey, "msg"))
+				vState = STATE_MSG;
+			else if (!strcmp(sKey, "cmd"))
+				vState = STATE_CMD;
+			
+			switch (vState)
 			{
-				strcopy(title, sizeof(title), buffer);
-			}
-			case STATE_TYPE:
-			{
-				strcopy(type, sizeof(type), buffer);
-			}
-			case STATE_MSG:
-			{
-				strcopy(msg, sizeof(msg), buffer);
-			}
-			case STATE_CMD:
-			{
-				strcopy(cmd, sizeof(cmd), buffer);
+				case STATE_TITLE:
+					strcopy(title, sizeof(title), sValue);
+				case STATE_TYPE:
+					strcopy(type, sizeof(type), sValue);
+				case STATE_MSG:
+					strcopy(msg, sizeof(msg), sValue);
+				case STATE_CMD:
+					strcopy(cmd, sizeof(cmd), sValue);
 			}
 		}
 	}
+	else
+	{
+		// we need to read twice to get each "pair" of data
+		 // this may over-estimate the number of reads needed (if some data values are missing) 
+		new count = BfReadByte(self) * 2;
+		//PrintToServer("Expecting %i values", count);
+		
+		BfReadString(self, buffer, sizeof(buffer));
+			
+		if (BfReadByte(self) != 1)
+			return Plugin_Continue;
+			
+		PrintToServer("OnMsgVGUIMenu called");
+		
+		if (strcmp(buffer, "info") != 0)
+				return Plugin_Continue;
+				
+		for (new i = 0; i < count; i++)
+		{
+			BfReadString(self, buffer, sizeof(buffer));
+			
+			if (!strcmp(buffer, ""))
+				continue; //We could probably safely break here and not lose anything
+			
+			new VGUIKVState:vState = STATE_INVALID;
+			
+			// Figure out which bit of data it is
+			if (!strcmp(buffer, "title"))
+				vState = STATE_TITLE;
+			else if (!strcmp(buffer, "type"))
+				vState = STATE_TYPE;
+			else if (!strcmp(buffer, "msg"))
+				vState = STATE_MSG;
+			else if (!strcmp(buffer, "cmd"))
+				vState = STATE_CMD;
+			
+			// Now read the actual data
+			BfReadString(self, buffer, sizeof(buffer));
+			switch (vState)
+			{
+				case STATE_TITLE:
+					strcopy(title, sizeof(title), buffer);
+				case STATE_TYPE:
+					strcopy(type, sizeof(type), buffer);
+				case STATE_MSG:
+					strcopy(msg, sizeof(msg), buffer);
+				case STATE_CMD:
+					strcopy(cmd, sizeof(cmd), buffer);
+			}
+		}
+	}
+	
 	
 	PrintToServer("-----");
 
@@ -173,8 +202,7 @@ public Action:OnMsgVGUIMenu(UserMsg:msg_id, Handle:self, const players[], player
 	}
 	else 	if (StringToInt(type) == MOTDPANEL_TYPE_INDEX && StrEqual(msg, "motd") && !StrEqual(g_MotdFileURL, ""))
 	{
-		//Loading motd.txt (hopefully) and it has a URL
-		PrintToServer("URL detected in MOTD.txt");
+		PrintToServer("URL detected in motdfile");
 		 
 		new Handle:pack = CreateDataPack();
 		WritePackCell(pack, GetClientSerial(client));
@@ -246,6 +274,8 @@ public Action:RedirectPage(Handle:timer, Handle:pack)
 	GetClientAuthId(client, AuthId_Steam2, szAuth, sizeof(szAuth));
 		
 	Format(msg, sizeof(msg), "%s%s&si=%s", msg, g_BaseURL, szAuth);
+	
+	PrintToServer("Loading URL %s", msg);
 	
 	new Handle:kv = CreateKeyValues("data");
 	KvSetString(kv, "msg",	msg);
