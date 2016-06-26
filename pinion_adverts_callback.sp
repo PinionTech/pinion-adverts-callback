@@ -1,6 +1,10 @@
-#define PLUGIN_VERSION "1.3.1"
+#define PLUGIN_VERSION "1.3.2"
 
 /*
+	1.3.2 <-> 2016 6/26 - Caelan Borowiec
+		Fixed some debug strings
+		Fixed some issues with the bitbuffer code
+		Added plugin myinfo
 	1.3.1 <-> 2016 6/25 - Caelan Borowiec
 		Added debug define
 		General code cleanup
@@ -23,6 +27,16 @@
 #define REQUIRE_PLUGIN
 
 //#define DEBUG
+
+// Plugin definitions
+public Plugin:myinfo =
+{
+	name = "Pinion Adverts Callback",
+	author = "Pinion.gg",
+	description = "Pinion in-game advertisements helper",
+	version = PLUGIN_VERSION,
+	url = "http://www.pinion.gg/"
+};
 
 enum VGUIKVState {
 	STATE_MSG,
@@ -69,6 +83,10 @@ public ConVarChange_MOTD(Handle:convar, const String:oldValue[], const String:ne
 
 public Action:OnMsgVGUIMenu(UserMsg:msg_id, Handle:self, const players[], playersNum, bool:reliable, bool:init)
 {
+	#if defined DEBUG
+	PrintToServer("OnMsgVGUIMenu hook running");
+	#endif
+	
 	new client = players[0];
 	if (playersNum > 1 || !IsClientInGame(client) || IsFakeClient(client))
 		return Plugin_Continue;
@@ -89,13 +107,13 @@ public Action:OnMsgVGUIMenu(UserMsg:msg_id, Handle:self, const players[], player
 
 	if (GetFeatureStatus(FeatureType_Native, "GetUserMessageType") == FeatureStatus_Available && GetUserMessageType() == UM_Protobuf)
 	{
+		#if defined DEBUG
+		PrintToServer("Using protobufs!");
+		#endif
+		
 		PbReadString(self, "name", buffer, sizeof(buffer));
 		if (strcmp(buffer, "info") != 0)
 			return Plugin_Continue;
-
-		#if defined SHOW_CONSOLE_MESSAGES
-		PrintToServer("Using protobufs!");
-		#endif
 
 		new count = PbGetRepeatedFieldCount(self, "subkeys");
 
@@ -134,28 +152,24 @@ public Action:OnMsgVGUIMenu(UserMsg:msg_id, Handle:self, const players[], player
 	}
 	else //Bitbuffer
 	{
-		// we need to read twice to get each "pair" of data
-		// this is an optimistic calculation and assumes that all keys are set
-		new count = BfReadByte(self) * 2;
-		#if defined SHOW_CONSOLE_MESSAGES
-		PrintToServer("Expecting %i values", count);
-		#endif
-
 		BfReadString(self, buffer, sizeof(buffer));
+		if (strcmp(buffer, "info") != 0)
+				return Plugin_Continue;
 
 		if (BfReadByte(self) != 1)
 			return Plugin_Continue;
-
-		#if defined SHOW_CONSOLE_MESSAGES
-		PrintToServer("OnMsgVGUIMenu called");
+		
+		// we need to read twice to get each "pair" of data
+		// this is an optimistic calculation and assumes that all keys are set
+		new count = BfReadByte(self) * 2;
+		#if defined DEBUG
+		PrintToServer("Expecting %i values", count);
 		#endif
-
-		if (strcmp(buffer, "info") != 0)
-				return Plugin_Continue;
 
 		for (new i = 0; i < count; i++)
 		{
 			BfReadString(self, buffer, sizeof(buffer));
+			PrintToServer("read '%s'", buffer);
 
 			if (!strcmp(buffer, ""))
 				continue; //We could probably safely break here and not lose anything
@@ -188,7 +202,7 @@ public Action:OnMsgVGUIMenu(UserMsg:msg_id, Handle:self, const players[], player
 		}
 	}
 
-	#if defined SHOW_CONSOLE_MESSAGES
+	#if defined DEBUG
 	PrintToServer("-----");
 
 	PrintToServer("title = %s", title);
@@ -200,7 +214,7 @@ public Action:OnMsgVGUIMenu(UserMsg:msg_id, Handle:self, const players[], player
 	// Check for valid web URLs and block them so we can create a modified version:
 	if((StrContains(msg, "http://", false) == 0) || (StrContains(msg, "https://", false) == 0))
 	{
-		#if defined SHOW_CONSOLE_MESSAGES
+		#if defined DEBUG
 		PrintToServer("Valid URL detected!");
 		#endif
 
@@ -217,7 +231,7 @@ public Action:OnMsgVGUIMenu(UserMsg:msg_id, Handle:self, const players[], player
 	}  // Else check for motd file triggers and values:
 	else 	if (StringToInt(type) == MOTDPANEL_TYPE_INDEX && StrEqual(msg, "motd") && !StrEqual(g_MotdFileURL, ""))
 	{
-		#if defined SHOW_CONSOLE_MESSAGES
+		#if defined DEBUG
 		PrintToServer("URL detected in motdfile");
 		#endif
 
@@ -292,7 +306,7 @@ public Action:RedirectPage(Handle:timer, Handle:pack)
 
 	Format(msg, sizeof(msg), "%s%s&si=%s", msg, g_BaseURL, szAuth);
 
-	#if defined SHOW_CONSOLE_MESSAGES
+	#if defined DEBUG
 	PrintToServer("Loading URL %s", msg);
 	#endif
 
