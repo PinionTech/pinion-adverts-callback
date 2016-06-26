@@ -1,6 +1,9 @@
-#define PLUGIN_VERSION "1.3.0"
+#define PLUGIN_VERSION "1.3.1"
 
 /*
+	1.3.1 <-> 2016 6/25 - Caelan Borowiec
+		Added debug define
+		General code cleanup
 	1.3.0 <-> 2016 6/25 - Caelan Borowiec
 		Added proper support for ProtoBufs
 	1.2.0 <-> 2016 6/17 - Caelan Borowiec
@@ -18,6 +21,8 @@
 #undef REQUIRE_PLUGIN
 #tryinclude <updater>
 #define REQUIRE_PLUGIN
+
+//#define DEBUG
 
 enum VGUIKVState {
 	STATE_MSG,
@@ -39,14 +44,14 @@ public OnPluginStart()
 	new UserMsg:VGUIMenu = GetUserMessageId("VGUIMenu");
 	if (VGUIMenu == INVALID_MESSAGE_ID)
 		SetFailState("Failed to find VGUIMenu usermessage");
-	
+
 	HookUserMessage(VGUIMenu, OnMsgVGUIMenu, true);
-	
+
 	BaseURLSetup();
-	
+
 	// Version of plugin - Make visible to game-monitor.com - Dont store in configuration file
 	CreateConVar("pinion_adverts_callback_version", PLUGIN_VERSION, "[SM] Pinion Adverts Callback Version", FCVAR_NOTIFY|FCVAR_DONTRECORD);
-	
+
 	#if defined _updater_included
 		if (LibraryExists("updater"))
 		{
@@ -71,26 +76,29 @@ public Action:OnMsgVGUIMenu(UserMsg:msg_id, Handle:self, const players[], player
 	decl String:buffer[256];
 
 	/*
-	Data is arranged in pairs that can be read with BfReadString
-	Odd key reads MAY be the data handle (eg, 'title' 'type' 'msg')
-	Even data reads MAY be the data itself (eg, 'Sponsor Message', '2', 'http://google.com')
+	Data is arranged in pairs that can be read with BfReadString or PbReadString
+	Odd key reads SHOULD be the data handle (eg, 'title' 'type' 'msg')
+	Even data reads SHOULD be the data itself (eg, 'Sponsor Message', '2', 'http://google.com')
 	If data values are not set, this ordering will not be predictable apart from the key first and the value second
 	*/
-	
+
 	decl String:title[256];
 	decl String:type[16];
 	decl String:msg[256];
 	decl String:cmd[64];
-	
+
 	if (GetFeatureStatus(FeatureType_Native, "GetUserMessageType") == FeatureStatus_Available && GetUserMessageType() == UM_Protobuf)
 	{
-		PbReadString(self, "name", buffer, sizeof(buffer));	
+		PbReadString(self, "name", buffer, sizeof(buffer));
 		if (strcmp(buffer, "info") != 0)
 			return Plugin_Continue;
-			
+
+		#if defined SHOW_CONSOLE_MESSAGES
 		PrintToServer("Using protobufs!");
+		#endif
+
 		new count = PbGetRepeatedFieldCount(self, "subkeys");
-		
+
 		decl String:sKey[128];
 		decl String:sValue[128];
 		for (int i = 0; i < count; i++)
@@ -98,11 +106,9 @@ public Action:OnMsgVGUIMenu(UserMsg:msg_id, Handle:self, const players[], player
 			Handle hSubKey = PbReadRepeatedMessage(self, "subkeys", i);
 			PbReadString(hSubKey, "name", sKey, sizeof(sKey));
 			PbReadString(hSubKey, "str", sValue, sizeof(sValue));
-			
-			//PrintToServer("%s: %s", sKey, sValue);
-			
+
 			new VGUIKVState:vState = STATE_INVALID;
-		
+
 			// Figure out which bit of data it is
 			if (!strcmp(sKey, "title"))
 				vState = STATE_TITLE;
@@ -112,7 +118,7 @@ public Action:OnMsgVGUIMenu(UserMsg:msg_id, Handle:self, const players[], player
 				vState = STATE_MSG;
 			else if (!strcmp(sKey, "cmd"))
 				vState = STATE_CMD;
-			
+
 			switch (vState)
 			{
 				case STATE_TITLE:
@@ -126,32 +132,36 @@ public Action:OnMsgVGUIMenu(UserMsg:msg_id, Handle:self, const players[], player
 			}
 		}
 	}
-	else
+	else //Bitbuffer
 	{
 		// we need to read twice to get each "pair" of data
-		 // this may over-estimate the number of reads needed (if some data values are missing) 
+		// this is an optimistic calculation and assumes that all keys are set
 		new count = BfReadByte(self) * 2;
-		//PrintToServer("Expecting %i values", count);
-		
+		#if defined SHOW_CONSOLE_MESSAGES
+		PrintToServer("Expecting %i values", count);
+		#endif
+
 		BfReadString(self, buffer, sizeof(buffer));
-			
+
 		if (BfReadByte(self) != 1)
 			return Plugin_Continue;
-			
+
+		#if defined SHOW_CONSOLE_MESSAGES
 		PrintToServer("OnMsgVGUIMenu called");
-		
+		#endif
+
 		if (strcmp(buffer, "info") != 0)
 				return Plugin_Continue;
-				
+
 		for (new i = 0; i < count; i++)
 		{
 			BfReadString(self, buffer, sizeof(buffer));
-			
+
 			if (!strcmp(buffer, ""))
 				continue; //We could probably safely break here and not lose anything
-			
+
 			new VGUIKVState:vState = STATE_INVALID;
-			
+
 			// Figure out which bit of data it is
 			if (!strcmp(buffer, "title"))
 				vState = STATE_TITLE;
@@ -161,7 +171,7 @@ public Action:OnMsgVGUIMenu(UserMsg:msg_id, Handle:self, const players[], player
 				vState = STATE_MSG;
 			else if (!strcmp(buffer, "cmd"))
 				vState = STATE_CMD;
-			
+
 			// Now read the actual data
 			BfReadString(self, buffer, sizeof(buffer));
 			switch (vState)
@@ -177,47 +187,52 @@ public Action:OnMsgVGUIMenu(UserMsg:msg_id, Handle:self, const players[], player
 			}
 		}
 	}
-	
-	
+
+	#if defined SHOW_CONSOLE_MESSAGES
 	PrintToServer("-----");
 
 	PrintToServer("title = %s", title);
 	PrintToServer("type = %s", type);
 	PrintToServer("msg = %s", msg);
 	PrintToServer("cmd = %s", cmd);
-	
-	// Check for valid web URLs and block them so we can create a modified version
+	#endif
+
+	// Check for valid web URLs and block them so we can create a modified version:
 	if((StrContains(msg, "http://", false) == 0) || (StrContains(msg, "https://", false) == 0))
 	{
+		#if defined SHOW_CONSOLE_MESSAGES
 		PrintToServer("Valid URL detected!");
-		
+		#endif
+
 		new Handle:pack = CreateDataPack();
 		WritePackCell(pack, GetClientSerial(client));
 		WritePackString(pack, title);
 		WritePackString(pack, type);
 		WritePackString(pack, msg);
 		WritePackString(pack, cmd);
-		
+
 		CreateTimer(0.0, RedirectPage, pack, TIMER_FLAG_NO_MAPCHANGE);  // Delay a frame so this hook can die
 
 		return Plugin_Handled;
-	}
+	}  // Else check for motd file triggers and values:
 	else 	if (StringToInt(type) == MOTDPANEL_TYPE_INDEX && StrEqual(msg, "motd") && !StrEqual(g_MotdFileURL, ""))
 	{
+		#if defined SHOW_CONSOLE_MESSAGES
 		PrintToServer("URL detected in motdfile");
-		 
+		#endif
+
 		new Handle:pack = CreateDataPack();
 		WritePackCell(pack, GetClientSerial(client));
 		WritePackString(pack, title);
 		WritePackString(pack, type);
 		WritePackString(pack, g_MotdFileURL);
 		WritePackString(pack, cmd);
-		
+
 		CreateTimer(0.0, RedirectPage, pack, TIMER_FLAG_NO_MAPCHANGE);  // Delay a frame so this hook can die
 
 		return Plugin_Handled;
 	}
-		
+
 	return Plugin_Continue;
 }
 
@@ -261,33 +276,35 @@ public Action:RedirectPage(Handle:timer, Handle:pack)
 	new client = GetClientFromSerial(ReadPackCell(pack));
 	if (!client)
 		return Plugin_Stop;
-		
+
 	decl String:title[256];
 	decl String:type[16];
 	decl String:msg[256];
 	decl String:cmd[64];
-	
+
 	ReadPackString(pack, title, sizeof(title));
 	ReadPackString(pack, type, sizeof(type));
 	ReadPackString(pack, msg, sizeof(msg));
 	ReadPackString(pack, cmd, sizeof(cmd));
-	
+
 	decl String:szAuth[64];
 	GetClientAuthId(client, AuthId_Steam2, szAuth, sizeof(szAuth));
-		
+
 	Format(msg, sizeof(msg), "%s%s&si=%s", msg, g_BaseURL, szAuth);
-	
+
+	#if defined SHOW_CONSOLE_MESSAGES
 	PrintToServer("Loading URL %s", msg);
-	
+	#endif
+
 	new Handle:kv = CreateKeyValues("data");
 	KvSetString(kv, "msg",	msg);
 	KvSetString(kv, "title", title);
 	KvSetNum(kv, "type", MOTDPANEL_TYPE_URL);
 	ShowVGUIPanelEx(client, "info", kv, true, USERMSG_BLOCKHOOKS|USERMSG_RELIABLE);
 	CloseHandle(kv);
-	
+
 	CloseHandle(pack);
-	
+
 	return Plugin_Stop;
 }
 
