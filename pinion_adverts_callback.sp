@@ -1,6 +1,8 @@
-#define PLUGIN_VERSION "1.3.2"
+#define PLUGIN_VERSION "1.3.3"
 
 /*
+	1.3.3 <-> 2017 6/8 - Caelan Borowiec
+		Plugin now sets "sv_disable_motd 0" automatically
 	1.3.2 <-> 2016 6/26 - Caelan Borowiec
 		Fixed some debug strings
 		Fixed some issues with the bitbuffer code
@@ -79,6 +81,13 @@ public OnPluginStart()
 public ConVarChange_MOTD(Handle:convar, const String:oldValue[], const String:newValue[])
 {
 	BaseURLSetup();
+}
+
+public OnConfigsExecuted()
+{
+	new Handle:hDisabledMOTD = FindConVar("sv_disable_motd");
+	if (hDisabledMOTD != INVALID_HANDLE)
+		SetConVarBool(hDisabledMOTD, false);
 }
 
 public Action:OnMsgVGUIMenu(UserMsg:msg_id, Handle:self, const players[], playersNum, bool:reliable, bool:init)
